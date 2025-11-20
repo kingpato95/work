@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package datanode;
+
+option go_package = "./proto;datanode_proto";
+
+message VectorClock {
+    map<string, int64> vc = 1;
+}
+
+
+message FlightState {
+    string flight_id = 1;
+    string status = 2;              // Ejemplo: "A Tiempo", "Retrasado", "Cancelado"
+    string gate = 3;                // Puerta de embarque asignada
+    int64 scheduled_time = 4;       // Hora programada (timestamp)
+    VectorClock clock = 5;          // Reloj Vectorial asociado a este estado
+}
+
+message UpdateRequest {
+    FlightState update = 1;         // El nuevo estado del vuelo con su VC adjunto
+}
+
+message UpdateResponse {
+    bool success = 1;
+    string message = 2;             // Mensaje de éxito, o si hubo un conflicto resuelto
+}
+
+
+message ReadRequest {
+    string flight_id = 1;
+    
+    VectorClock client_version = 2; 
+}
+
+message ReadResponse {
+    FlightState current_state = 1;  // El estado actual del vuelo, incluyendo su VC
+    bool consistent = 2;            // Indica si la respuesta cumple con la versión solicitada (Monotonic)
+}
+
+message GossipRequest {
+    string sender_id = 1;
+    map<string, FlightState> updates = 2; 
+}
+
+message GossipResponse {
+    bool success = 1;
+    map<string, FlightState> counter_updates = 2;
+}
+
+
+
+service DatanodeService {
+    rpc ProcessUpdate (UpdateRequest) returns (UpdateResponse);
+    rpc ReadFlightState (ReadRequest) returns (ReadResponse);
+    rpc ExchangeGossip (GossipRequest) returns (GossipResponse);
+}

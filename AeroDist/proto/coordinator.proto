@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package coordinator;
+
+option go_package = "./proto;coordinator_proto";
+
+import "datanode.proto";
+
+message CheckInRequest {
+    string client_id = 1; 
+    string flight_id = 2;
+    string selected_seat = 3;   
+  
+    string request_id = 4;        
+}
+
+message CheckInResponse {
+    bool success = 1;
+    string message = 2;
+    datanode.FlightState updated_state = 3;
+}
+
+message GetBoardingPassRequest {
+    string client_id = 1;        
+    string flight_id = 2;
+}
+
+message GetBoardingPassResponse {
+    datanode.FlightState boarding_pass_state = 1;
+}
+
+service CoordinatorService {
+    rpc CheckIn (CheckInRequest) returns (CheckInResponse);
+    
+    rpc GetBoardingPass (GetBoardingPassRequest) returns (GetBoardingPassResponse);
+}
