@@ -150,8 +150,25 @@ func (s *Server) ProcessUpdate(ctx context.Context, req *pbDatanode.UpdateReques
 // Devuelve: (isConcurrent, isCausal).
 // isCausal: 1 si VC1 > VC2, -1 si VC1 < VC2, 0 si no hay relación (iguales o concurrentes).
 func compareVectorClocks(vc1 map[string]int64, vc2 map[string]int64, nodeID string) (bool, int) {
-	// ... Implementación de comparación de VC:
-	return false, 1 // Placeholder para continuar la implementación
+    // Unificar claves de ambos mapas
+    allKeys := make(map[string]bool)
+    for k := range vc1 { allKeys[k] = true }
+    for k := range vc2 { allKeys[k] = true }
+
+    greater := false
+    less := false
+
+    for k := range allKeys {
+        v1 := vc1[k]
+        v2 := vc2[k]
+        if v1 > v2 { greater = true }
+        if v1 < v2 { less = true }
+    }
+
+    if greater && less { return true, 0 } // Concurrentes (Conflicto)
+    if greater { return false, 1 }        // VC1 es posterior
+    if less { return false, -1 }          // VC1 es anterior
+    return false, 0                       // Iguales
 }
 
 // applyUpdate aplica los cambios de estado (si no están vacíos) y fusiona/actualiza el VC.

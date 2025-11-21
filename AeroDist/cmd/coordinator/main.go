@@ -82,47 +82,55 @@ func main() {
 }
 
 // CheckIn maneja la operación de escritura y establece la afinidad de sesión.
+// CheckIn maneja la operación de escritura y establece la afinidad de sesión.
 func (s *Server) CheckIn(ctx context.Context, req *pbCoordinator.CheckInRequest) (*pbCoordinator.CheckInResponse, error) {
 	log.Printf("📝 Recibiendo Check-in de Cliente %s para Vuelo %s", req.ClientId, req.FlightId)
 
-	// El Coordinador selecciona un Datanode para la afinidad
-	// (En un caso real, podría elegir el menos cargado o simplemente Round Robin)
+	// 1. Seleccionar un Datanode ESPECÍFICO
 	selectedDatanodeID := selectDatanodeID(s.dnClientMap)
 	if selectedDatanodeID == "" {
-		return &pbCoordinator.CheckInResponse{Success: false, Message: "No Datanodes disponibles para check-in."}, status.Errorf(codes.Unavailable, "No Datanodes disponibles.")
+		return nil, status.Errorf(codes.Unavailable, "No Datanodes disponibles.")
 	}
 
-	// 1. Registrar Afinidad antes de la escritura (para RYW)
-	s.registerAffinity(req.ClientId, selectedDatanodeID)
-	log.Printf("🔗 Afinidad de Cliente %s registrada a Datanode %s", req.ClientId, selectedDatanodeID)
+	// 2. Obtener el cliente directo de ese Datanode (¡NO EL DEL BROKER!)
+	dnClient, exists := s.dnClientMap[selectedDatanodeID]
+	if !exists {
+		return nil, status.Errorf(codes.Internal, "Cliente Datanode %s no encontrado", selectedDatanodeID)
+	}
 
-	// 2. Reenviar la solicitud de escritura al Broker Central [cite: 69]
-	// Nota: El Broker implementa ProcessUpdate, pero para CheckIn, la lógica de negocio
-	// (selección de asiento) iría en un mensaje de actualización más complejo.
-	// Por simplicidad, aquí simulamos una actualización básica para la RYW.
+	// 3. Construir la actualización
 	updateReq := &pbDatanode.UpdateRequest{
 		Update: &pbDatanode.FlightState{
 			FlightId: req.FlightId,
-			Gate:     "CHECKED-IN", // Simular un cambio de estado
+			Gate:     "CHECKED-IN",
 			Status:   "Seat: " + req.SelectedSeat,
-			// Otros campos, incluyendo VC, se inicializarían/manejarían en el Broker/Datanode
+            // Inicializar VC vacío para escritura nueva
+            Clock:    &pbDatanode.VectorClock{Vc: make(map[string]int64)}, 
 		},
 	}
 
-	// Enviamos la escritura al Broker
-	respBroker, err := s.brokerClient.ProcessUpdate(ctx, updateReq)
+	// 4. Enviar escritura DIRECTA al Datanode seleccionado
+    // (Esto garantiza que el dato esté ahí cuando vayamos a leerlo después)
+	log.Printf("🚀 Enviando Check-in DIRECTO a %s...", selectedDatanodeID)
+	respDN, err := dnClient.ProcessUpdate(ctx, updateReq)
+	
 	if err != nil {
-		s.deleteAffinity(req.ClientId) // Deshacer afinidad si la escritura falla
-		return nil, status.Errorf(codes.Internal, "Error al procesar escritura en Broker: %v", err)
+		return nil, status.Errorf(codes.Internal, "Error al escribir en Datanode %s: %v", selectedDatanodeID, err)
 	}
 
-	if !respBroker.Success {
-		s.deleteAffinity(req.ClientId)
-		return &pbCoordinator.CheckInResponse{Success: false, Message: "Escritura de check-in rechazada: " + respBroker.Message}, nil
+	if !respDN.Success {
+		return &pbCoordinator.CheckInResponse{Success: false, Message: respDN.Message}, nil
 	}
 
-	log.Printf("✅ Check-in de %s completado con éxito. Datanode de sesión: %s", req.ClientId, selectedDatanodeID)
-	return &pbCoordinator.CheckInResponse{Success: true, Message: "Check-in exitoso. Asiento: " + req.SelectedSeat, UpdatedState: updateReq.Update}, nil
+	// 5. Registrar la afinidad (Ahora sí es seguro)
+	s.registerAffinity(req.ClientId, selectedDatanodeID)
+	log.Printf("🔗 Afinidad registrada: %s -> %s", req.ClientId, selectedDatanodeID)
+
+	return &pbCoordinator.CheckInResponse{
+		Success: true, 
+		Message: "Check-in exitoso. Asiento: " + req.SelectedSeat, 
+		UpdatedState: updateReq.Update,
+	}, nil
 }
 
 // GetBoardingPass maneja la lectura de confirmación (RYW).

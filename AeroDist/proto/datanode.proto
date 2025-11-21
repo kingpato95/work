@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package datanode;
 
-option go_package = "./proto;datanode_proto";
+option go_package = "aeroDist/proto/datanode";
 
 message VectorClock {
     map<string, int64> vc = 1;

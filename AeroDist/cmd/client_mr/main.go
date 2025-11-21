@@ -33,7 +33,7 @@ type Client struct {
 }
 
 func main() {
-	log.Println("🚀 Iniciando Cliente MR (Pasajero Observador)...")
+	log.Println("Iniciando Cliente MR (Pasajero Observador)...")
 
 	// 1. Obtener ClientID
 	clientID := os.Getenv("CLIENT_ID")
@@ -44,7 +44,7 @@ func main() {
 	// 2. Conexión con el Broker
 	conn, err := grpc.Dial(brokerAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("❌ No se pudo conectar al Broker %s: %v", brokerAddr, err)
+		log.Fatalf("No se pudo conectar al Broker %s: %v", brokerAddr, err)
 	}
 	defer conn.Close()
 
@@ -86,7 +86,7 @@ func (c *Client) PerformMonotonicRead(flightID string) {
 		},
 	}
 
-	log.Printf("🔍 Solicitando Vuelo %s. Versión conocida (VC): %v", flightID, currentVC)
+	log.Printf("Solicitando Vuelo %s. Versión conocida (VC): %v", flightID, currentVC)
 
 	// 3. Enviar la consulta al Broker
 	resp, err := c.BrokerClient.ReadFlightState(ctx, readReq)
@@ -97,13 +97,13 @@ func (c *Client) PerformMonotonicRead(flightID string) {
 			log.Printf("⚠️ %s: Datanode atrasado. Reintentando en breve.", c.ClientID)
 			return // El servidor (Datanode) indicó que no pudo satisfacer la monotonicidad.
 		}
-		log.Printf("❌ [%s] ERROR de Lectura: %v", c.ClientID, err)
+		log.Printf("[%s] ERROR de Lectura: %v", c.ClientID, err)
 		return
 	}
 
 	currentState := resp.GetCurrentState()
 	if currentState == nil {
-		log.Println("ℹ️ Vuelo no encontrado o sin datos aún.")
+		log.Println("Vuelo no encontrado o sin datos aún.")
 		return
 	}
 
@@ -112,7 +112,7 @@ func (c *Client) PerformMonotonicRead(flightID string) {
 
 	// La validación se hace implícitamente por el servidor, pero el cliente verifica si hubo retroceso.
 	if c.isVersionCausallyBefore(newVC, currentVC) {
-		log.Printf("🛑 [%s] FALLO DE CONSISTENCIA MONOTONIC READS!", c.ClientID)
+		log.Printf("[%s] FALLO DE CONSISTENCIA MONOTONIC READS!", c.ClientID)
 		log.Printf("   Versión Anterior (VC): %v", currentVC)
 		log.Printf("   Versión Recibida (VC): %v", newVC)
 		log.Printf("   Estado: %s, Puerta: %s", currentState.GetStatus(), currentState.GetGate())

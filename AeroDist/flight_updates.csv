@@ -1,0 +1,201 @@
+sim_time_sec,flight_id,update_type,update_value
+2,AF-021,estado,En vuelo
+4,LA-500,puerta,A2
+6,DL-456,estado,En vuelo
+7,AA-901,estado,Cancelado
+8,LA-500,estado,Retrasado
+11,LA-500,puerta,B2
+12,LA-500,puerta,C7
+13,AF-021,estado,A tiempo
+15,AA-901,puerta,A2
+16,LA-500,puerta,C7
+18,AA-901,puerta,C8
+20,AA-901,puerta,B1
+23,SK-772,estado,Retrasado
+26,AF-021,estado,Retrasado
+29,AF-021,estado,En vuelo
+32,SK-772,puerta,B1
+33,IB-6833,puerta,A1
+36,AA-901,estado,A tiempo
+37,IB-6833,estado,Cancelado
+38,DL-456,puerta,A1
+39,SK-772,puerta,B1
+41,AA-901,puerta,C8
+42,LA-500,estado,Retrasado
+45,LA-500,puerta,C5
+46,SK-772,estado,Embarcando
+48,LA-500,estado,Retrasado
+51,LA-500,estado,A tiempo
+52,SK-772,estado,Cancelado
+53,SK-772,estado,En vuelo
+56,IB-6833,estado,Cancelado
+59,DL-456,estado,Llegó
+61,IB-6833,puerta,B1
+62,AA-901,puerta,B2
+65,DL-456,estado,Retrasado
+66,AF-021,estado,En vuelo
+67,IB-6833,puerta,A1
+69,SK-772,puerta,B1
+70,LA-500,estado,A tiempo
+71,DL-456,estado,En vuelo
+74,AA-901,estado,En vuelo
+76,AA-901,estado,A tiempo
+78,AA-901,estado,Llegó
+79,AF-021,puerta,C8
+81,LA-500,estado,Embarcando
+84,IB-6833,puerta,A3
+85,DL-456,puerta,B3
+87,AF-021,puerta,A2
+88,AA-901,estado,En vuelo
+89,SK-772,puerta,A1
+91,DL-456,estado,Llegó
+94,AF-021,estado,Retrasado
+96,LA-500,estado,En vuelo
+97,IB-6833,estado,En vuelo
+99,IB-6833,estado,En vuelo
+100,DL-456,estado,Retrasado
+103,IB-6833,puerta,B3
+104,IB-6833,estado,Retrasado
+105,IB-6833,puerta,A2
+108,AF-021,estado,En vuelo
+111,AF-021,puerta,A2
+113,AF-021,puerta,C8
+114,SK-772,estado,A tiempo
+115,AF-021,estado,En vuelo
+118,AA-901,estado,A tiempo
+121,AF-021,estado,En vuelo
+124,IB-6833,estado,Retrasado
+125,AF-021,estado,Cancelado
+126,SK-772,puerta,A2
+129,IB-6833,estado,Retrasado
+132,DL-456,estado,Llegó
+134,AA-901,estado,A tiempo
+135,DL-456,puerta,C7
+136,AF-021,estado,A tiempo
+139,AF-021,estado,En vuelo
+140,AA-901,estado,Llegó
+143,DL-456,estado,En vuelo
+144,AF-021,estado,Embarcando
+145,AF-021,puerta,C5
+148,AF-021,estado,Retrasado
+151,AF-021,estado,A tiempo
+153,DL-456,estado,Retrasado
+155,IB-6833,estado,Retrasado
+157,AA-901,estado,Embarcando
+159,AF-021,estado,Cancelado
+160,AF-021,estado,En vuelo
+162,SK-772,estado,Llegó
+165,SK-772,estado,En vuelo
+168,AF-021,estado,Cancelado
+169,LA-500,puerta,B3
+172,DL-456,estado,Cancelado
+173,AA-901,puerta,A2
+175,IB-6833,estado,Cancelado
+177,SK-772,estado,Llegó
+180,LA-500,estado,A tiempo
+183,AF-021,estado,En vuelo
+186,AF-021,estado,Llegó
+187,IB-6833,puerta,C7
+190,LA-500,estado,Retrasado
+192,SK-772,estado,Embarcando
+193,SK-772,estado,Retrasado
+194,IB-6833,puerta,B3
+197,DL-456,estado,En vuelo
+200,AA-901,puerta,C7
+201,DL-456,puerta,A3
+204,AA-901,estado,Cancelado
+205,AA-901,estado,En vuelo
+207,SK-772,estado,A tiempo
+209,DL-456,estado,A tiempo
+211,SK-772,estado,A tiempo
+212,IB-6833,estado,A tiempo
+215,AA-901,puerta,C7
+217,IB-6833,puerta,A2
+219,AF-021,estado,Retrasado
+220,AA-901,estado,Retrasado
+221,IB-6833,puerta,C8
+222,IB-6833,estado,Retrasado
+225,LA-500,estado,En vuelo
+228,AF-021,estado,A tiempo
+229,AF-021,puerta,B3
+231,AF-021,estado,En vuelo
+234,LA-500,estado,Embarcando
+236,IB-6833,puerta,C8
+239,DL-456,estado,A tiempo
+241,AF-021,puerta,A3
+243,DL-456,puerta,A3
+244,IB-6833,estado,Llegó
+245,AA-901,estado,Llegó
+246,AA-901,estado,A tiempo
+247,DL-456,estado,Cancelado
+250,AA-901,estado,Embarcando
+253,AA-901,estado,En vuelo
+255,LA-500,estado,Embarcando
+257,SK-772,puerta,C8
+260,SK-772,estado,Embarcando
+263,AA-901,puerta,A1
+264,IB-6833,estado,En vuelo
+265,DL-456,estado,Retrasado
+268,IB-6833,puerta,C7
+270,DL-456,estado,Llegó
+271,AA-901,estado,En vuelo
+272,DL-456,puerta,C5
+275,AA-901,puerta,C8
+277,SK-772,estado,Cancelado
+279,IB-6833,puerta,B2
+282,AF-021,puerta,C5
+283,DL-456,puerta,A1
+285,IB-6833,puerta,B1
+286,LA-500,estado,En vuelo
+287,AF-021,estado,En vuelo
+288,AA-901,puerta,B2
+291,DL-456,estado,Llegó
+294,AA-901,estado,Embarcando
+295,AA-901,puerta,B2
+297,AF-021,estado,Llegó
+300,AA-901,puerta,B2
+302,LA-500,puerta,B2
+304,DL-456,estado,En vuelo
+305,DL-456,puerta,A2
+307,SK-772,estado,En vuelo
+309,AA-901,estado,Cancelado
+311,IB-6833,puerta,C5
+313,AF-021,estado,A tiempo
+316,AA-901,estado,Cancelado
+318,AA-901,puerta,C5
+321,DL-456,puerta,C8
+324,SK-772,puerta,C8
+325,IB-6833,estado,Embarcando
+328,AA-901,estado,En vuelo
+331,LA-500,estado,Cancelado
+334,LA-500,estado,Embarcando
+337,AF-021,estado,En vuelo
+340,LA-500,estado,A tiempo
+342,SK-772,estado,A tiempo
+345,LA-500,estado,En vuelo
+348,DL-456,puerta,B2
+349,AF-021,puerta,C8
+350,DL-456,puerta,B1
+352,SK-772,puerta,A3
+355,LA-500,estado,Embarcando
+358,DL-456,estado,Retrasado
+361,AF-021,estado,Retrasado
+363,AF-021,estado,Retrasado
+364,SK-772,estado,En vuelo
+366,AF-021,puerta,B2
+369,DL-456,estado,En vuelo
+371,LA-500,puerta,C7
+372,IB-6833,estado,Cancelado
+374,AF-021,estado,En vuelo
+377,LA-500,puerta,B2
+378,AF-021,estado,Llegó
+380,DL-456,estado,Cancelado
+383,AF-021,estado,Embarcando
+385,DL-456,estado,En vuelo
+386,LA-500,estado,A tiempo
+388,AA-901,estado,Embarcando
+389,LA-500,estado,En vuelo
+390,DL-456,estado,Embarcando
+391,IB-6833,puerta,C7
+392,SK-772,estado,En vuelo
+395,LA-500,estado,A tiempo

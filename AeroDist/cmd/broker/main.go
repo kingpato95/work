@@ -3,11 +3,15 @@ package main
 import (
 	"context"
 	"log"
-	"math/rand"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"encoding/csv" // Nuevo
+	"io"           // Nuevo
+	"os"           // Nuevo
+	"strconv"      // Nuevo
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -51,26 +55,29 @@ type Server struct {
 	rrCounter int
 	mu        sync.Mutex
 
+	logicalClock int64
+
+
 	// Para el Reporte.txt
 	criticalOps []string
 }
 
 func main() {
-	log.Println("🚀 Iniciando Broker Central (Sistema Central de Operaciones)...")
+	log.Println("Iniciando Broker Central (Sistema Central de Operaciones)...")
 
 	// 1. Inicializar Clientes a Subsistemas
 	datanodeClients := initializeDatanodeClients(datanodeAddrs)
 	if len(datanodeClients) == 0 {
-		log.Printf("⚠️ Advertencia: No se pudo conectar a Datanodes. Solo Consenso/Broadcast funcionarán.")
+		log.Printf("Advertencia: No se pudo conectar a Datanodes. Solo Consenso/Broadcast funcionarán.")
 	} else {
-		log.Printf("✅ Clientes a %d Datanodes inicializados.", len(datanodeClients))
+		log.Printf("Clientes a %d Datanodes inicializados.", len(datanodeClients))
 	}
 
 	atcClients := initializeConsensusClients(atcNodeAddrs)
 	if len(atcClients) == 0 {
-		log.Fatal("❌ Error: No se pudo conectar a ningún Nodo ATC para operaciones críticas.")
+		log.Fatal("Error: No se pudo conectar a ningún Nodo ATC para operaciones críticas.")
 	}
-	log.Printf("✅ Clientes a %d Nodos ATC inicializados.", len(atcClients))
+	log.Printf("Clientes a %d Nodos ATC inicializados.", len(atcClients))
 
 	// 2. Crear la instancia del servidor Broker
 	s := &Server{
@@ -86,7 +93,7 @@ func main() {
 	// 4. Configurar y lanzar el servidor gRPC
 	lis, err := net.Listen("tcp", brokerPort)
 	if err != nil {
-		log.Fatalf("❌ Error al escuchar en el puerto %s: %v", brokerPort, err)
+		log.Fatalf("Error al escuchar en el puerto %s: %v", brokerPort, err)
 	}
 
 	grpcServer := grpc.NewServer()
@@ -99,7 +106,7 @@ func main() {
 
 	log.Printf("👂 Broker escuchando en %v", lis.Addr())
 	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("❌ Fallo al servir: %v", err)
+		log.Fatalf("Fallo al servir: %v", err)
 	}
 }
 
@@ -122,46 +129,90 @@ func (s *Server) GetNextDatanodeClient() pbDatanode.DatanodeServiceClient {
 }
 
 // startAirlineUpdateSimulator simula la recepción de actualizaciones y realiza el Broadcast Asíncrono.
+// startAirlineUpdateSimulator lee eventos desde un CSV y los transmite.
 func (s *Server) startAirlineUpdateSimulator() {
-	minInterval := 1
-	maxInterval := 3
+	// Esperar un poco a que los Datanodes estén listos
+	time.Sleep(5 * time.Second)
+
+	log.Println("📂 Abriendo archivo de simulación: flight_updates.csv")
+	file, err := os.Open("/app/flight_updates.csv")
+	if err != nil {
+		log.Printf("❌ Error abriendo CSV: %v. Usando modo manual/silencioso.", err)
+		return
+	}
+	defer file.Close()
+
+	reader := csv.NewReader(file)
+	
+	// Leer encabezado (si existe) para saltarlo
+	if _, err := reader.Read(); err != nil {
+		log.Printf("⚠️ Error leyendo encabezado CSV: %v", err)
+		return
+	}
+
+	var lastTime int = 0
 
 	for {
-		interval := time.Duration(rand.Intn(maxInterval-minInterval+1)+minInterval) * time.Second
-		time.Sleep(interval)
-
-		flightID := "LA-500"
-		statusUpdates := []string{"Retrasado", "A Tiempo", "Embarcando"}
-		gateUpdates := []string{"C7", "B12", "A5"}
-
-		var update *pbDatanode.FlightState
-
-		if rand.Intn(2) == 0 {
-			update = &pbDatanode.FlightState{
-				FlightId: flightID,
-				Status:   statusUpdates[rand.Intn(len(statusUpdates))],
-				Gate:     "",
-			}
-		} else {
-			update = &pbDatanode.FlightState{
-				FlightId: flightID,
-				Status:   "",
-				Gate:     gateUpdates[rand.Intn(len(gateUpdates))],
-			}
+		record, err := reader.Read()
+		if err == io.EOF {
+			log.Println("🏁 Fin del archivo de simulación CSV.")
+			break
+		}
+		if err != nil {
+			log.Printf("❌ Error leyendo línea CSV: %v", err)
+			continue
 		}
 
-		// El Broker simula adjuntar el reloj vectorial (simplificado para el ejemplo)
+		// Formato esperado: sim_time_sec, flight_id, update_type, update_value
+		// Ejemplo: 2, AF-021, estado, En vuelo
+		if len(record) < 4 {
+			continue
+		}
+
+		simTime, _ := strconv.Atoi(record[0])
+		flightID := record[1]
+		updateType := record[2]
+		updateValue := record[3]
+
+		// Calcular espera (delta de tiempo)
+		delay := time.Duration(simTime - lastTime) * time.Second
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+		lastTime = simTime
+
+		// Construir actualización
+		update := &pbDatanode.FlightState{
+			FlightId: flightID,
+		}
+
+		if updateType == "estado" {
+			update.Status = updateValue
+		} else if updateType == "puerta" {
+			update.Gate = updateValue
+		}
+
+		// === LÓGICA DE RELOJ VECTORIAL ===
+		s.mu.Lock()
+		s.logicalClock++
+		currentTick := s.logicalClock
+		s.mu.Unlock()
+
 		update.Clock = &pbDatanode.VectorClock{
-			Vc: map[string]int64{"broker": time.Now().UnixNano()},
+			Vc: map[string]int64{"broker": currentTick},
 		}
+		// ================================
 
+		log.Printf("csv_event -> Vuelo: %s | %s: %s | Reloj: %d", flightID, updateType, updateValue, currentTick)
+		
+		// Enviar a todos
 		s.broadcastUpdate(update)
 	}
 }
 
 // broadcastUpdate distribuye la actualización a todos los Datanodes de forma asíncrona.
 func (s *Server) broadcastUpdate(update *pbDatanode.FlightState) {
-	log.Printf("📢 Broker Broadcast: Enviando actualización de vuelo %s...", update.FlightId)
+	log.Printf("Broker Broadcast: Enviando actualización de vuelo %s...", update.FlightId)
 
 	var wg sync.WaitGroup
 	for _, client := range s.datanodeClients {
@@ -252,7 +303,7 @@ func initializeDatanodeClients(addrs string) []pbDatanode.DatanodeServiceClient 
 	for _, addr := range addrList {
 		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
-			log.Printf("⚠️ No se pudo conectar a Datanode %s: %v", addr, err)
+			log.Printf("No se pudo conectar a Datanode %s: %v", addr, err)
 			continue
 		}
 		// NOTE: La conexión debería cerrarse al finalizar la ejecución del Broker.
@@ -269,10 +320,31 @@ func initializeConsensusClients(addrs string) []pbConsensus.ConsensusServiceClie
 	for _, addr := range addrList {
 		conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
-			log.Fatalf("❌ Error fatal al conectar con ATC Node %s: %v", addr, err)
+			log.Fatalf("Error fatal al conectar con ATC Node %s: %v", addr, err)
 		}
 		// NOTE: La conexión debería cerrarse al finalizar la ejecución del Broker.
 		clients = append(clients, pbConsensus.NewConsensusServiceClient(conn))
 	}
 	return clients
 }
+
+// ProcessUpdate maneja las escrituras (Check-in) redirigidas por el Coordinador.
+func (s *Server) ProcessUpdate(ctx context.Context, req *pbDatanode.UpdateRequest) (*pbDatanode.UpdateResponse, error) {
+	log.Printf("📝 Broker: Recibiendo escritura (Check-in) para vuelo %s", req.Update.FlightId)
+
+	// 1. Seleccionar un Datanode destino (Balanceo de Carga)
+	client := s.GetNextDatanodeClient()
+	if client == nil {
+		return nil, grpc.Errorf(codes.Unavailable, "No Datanodes available for write")
+	}
+
+	// 2. Reenviar la solicitud al Datanode seleccionado
+	resp, err := client.ProcessUpdate(ctx, req)
+	if err != nil {
+		log.Printf("❌ Error al escribir en Datanode: %v", err)
+		return nil, err
+	}
+
+	log.Printf("✅ Escritura exitosa en Datanode.")
+	return resp, nil
+} 

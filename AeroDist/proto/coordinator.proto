@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package coordinator;
 
-option go_package = "./proto;coordinator_proto";
+option go_package = "aeroDist/proto/coordinator";
 
 import "datanode.proto";
 

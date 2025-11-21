@@ -19,12 +19,12 @@ import (
 const (
 	defaultNodeID      = "atc1"
 	atcNodePort        = ":50053"
-	electionTimeoutMin = 150 * time.Millisecond
-	electionTimeoutMax = 300 * time.Millisecond
-	heartbeatInterval  = 50 * time.Millisecond // Para el Líder
+	electionTimeoutMin = 500 * time.Millisecond
+	electionTimeoutMax = 1000 * time.Millisecond
+	heartbeatInterval  = 50 * time.Millisecond
 )
 
-// Role define el estado de un nodo ATC.
+
 type Role int
 
 const (
@@ -33,14 +33,6 @@ const (
 	Leader
 )
 
-// LogEntry representa una decisión atómica en el log.
-type LogEntry struct {
-	Term  int64
-	Index int64
-	Data  string // La decisión: "ASSIGN Pista 01 TO IB-6833"
-}
-
-// Server implementa el servicio ConsensusService y contiene el estado del nodo.
 type Server struct {
 	pbConsensus.UnimplementedConsensusServiceServer
 
@@ -49,24 +41,23 @@ type Server struct {
 
 	mu       sync.Mutex
 	Role     Role
-	Term     int64      // Término actual
-	VotedFor string     // Votado en el término actual (vacío o ID de candidato)
-	Log      []LogEntry // Log replicado inmutable
+	Term     int64
+	VotedFor string
+	
+	Log      []*pbConsensus.LogEntry 
 
-	CommitIndex int64 // Último índice conocido como committed
-	LastApplied int64 // Último índice aplicado a la máquina de estado
+	CommitIndex int64
+	LastApplied int64
 
-	// Lógica de Liderazgo (solo para el Líder)
-	NextIndex  map[string]int64 // Índice del siguiente LogEntry a enviar a cada seguidor
-	MatchIndex map[string]int64 // Índice más alto conocido como replicado en cada seguidor
+	NextIndex  map[string]int64
+	MatchIndex map[string]int64
 
-	// Temporizadores y señales
 	electionTimeout *time.Timer
-	heartbeatC      chan struct{} // Canal para resetear el timeout
+	heartbeatC      chan struct{}
 }
 
 func main() {
-	log.Println("🚀 Iniciando Nodo de Control de Tráfico Aéreo (Consenso)...")
+	log.Println("Iniciando Nodo de Control de Tráfico Aéreo (Consenso)...")
 
 	nodeID := os.Getenv("NODE_ID")
 	if nodeID == "" {
@@ -77,16 +68,15 @@ func main() {
 
 	peerAddrs := os.Getenv("PEER_ADDRS")
 	if peerAddrs == "" {
-		peerAddrs = "atc2:50053,atc3:50053" // Ejemplo
+		peerAddrs = "atc2:50053,atc3:50053"
 	}
 	s.initializePeerClients(peerAddrs)
 
-	// Iniciar la goroutine de Consenso (maneja roles, timeouts y elecciones)
 	go s.run()
 
 	lis, err := net.Listen("tcp", atcNodePort)
 	if err != nil {
-		log.Fatalf("❌ Error al escuchar en el puerto %s: %v", atcNodePort, err)
+		log.Fatalf("Error al escuchar en el puerto %s: %v", atcNodePort, err)
 	}
 
 	grpcServer := grpc.NewServer()
@@ -94,28 +84,22 @@ func main() {
 
 	log.Printf("👂 Nodo ATC %s escuchando en %v", nodeID, lis.Addr())
 	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("❌ Fallo al servir: %v", err)
+		log.Fatalf("Fallo al servir: %v", err)
 	}
 }
 
-// NewConsensusServer constructor.
 func NewConsensusServer(nodeID string) *Server {
 	return &Server{
 		NodeID:          nodeID,
 		Role:            Follower,
 		Term:            0,
-		Log:             make([]LogEntry, 0),
+		Log:             make([]*pbConsensus.LogEntry, 0), // Inicializar slice de punteros
 		PeerClients:     make(map[string]pbConsensus.ConsensusServiceClient),
 		electionTimeout: time.NewTimer(getElectionTimeout()),
 		heartbeatC:      make(chan struct{}),
 	}
 }
 
-// =================================================================
-// PROTOCOLO DE CONCENSO CENTRAL
-// =================================================================
-
-// run es el loop principal que gestiona el rol del nodo y los timeouts.
 func (s *Server) run() {
 	for {
 		s.mu.Lock()
@@ -133,7 +117,6 @@ func (s *Server) run() {
 	}
 }
 
-// runFollower espera por heartbeats o inicia la elección si hay timeout.
 func (s *Server) runFollower() {
 	log.Printf("⚙️ %s: Soy Follower (Term %d). Esperando Heartbeat.", s.NodeID, s.Term)
 	s.electionTimeout.Reset(getElectionTimeout())
@@ -145,33 +128,28 @@ func (s *Server) runFollower() {
 			s.Role = Candidate
 			s.mu.Unlock()
 			log.Printf("⌛ %s: Election Timeout. Transicionando a Candidate.", s.NodeID)
-			return // Sale del loop de Follower para ejecutar runCandidate
+			return
 		case <-s.heartbeatC:
-			// Recibió Heartbeat o RequestVote válido: reiniciar timeout
 			s.electionTimeout.Reset(getElectionTimeout())
 		}
 	}
 }
 
-// runCandidate inicia una nueva elección.
 func (s *Server) runCandidate() {
 	s.startElection()
 
-	votesReceived := 1                          // Vota por sí mismo
-	votesNeeded := (len(s.PeerClients)+1)/2 + 1 // Regla de Quórum (N/2 + 1)
+	votesReceived := 1
+	votesNeeded := (len(s.PeerClients)+1)/2 + 1
 
-	// Temporizador para la nueva elección si no se gana.
 	electionTimer := time.NewTimer(getElectionTimeout())
 	defer electionTimer.Stop()
 
 	for s.Role == Candidate {
 		select {
 		case <-electionTimer.C:
-			// Timeout: iniciar nueva elección (el loop exterior llamará startElection de nuevo)
 			log.Printf("🔄 %s: Election fallida (Timeout). Reintentando.", s.NodeID)
 			return
 		case <-s.heartbeatC:
-			// Recibió un AppendEntries (Heartbeat) de un Líder legítimo
 			s.mu.Lock()
 			s.Role = Follower
 			s.VotedFor = ""
@@ -186,47 +164,42 @@ func (s *Server) runCandidate() {
 			}
 			s.mu.Unlock()
 			if s.Role == Leader {
-				return // Sale del loop de Candidate para ejecutar runLeader
+				return
 			}
 		}
 	}
 }
 
-// runLeader envía heartbeats periódicamente.
 func (s *Server) runLeader() {
 	log.Printf("🌟 %s: Soy el Líder (Term %d). Enviando Heartbeats...", s.NodeID, s.Term)
 	s.initializeLeaderState()
 
-	// Loop de Heartbeat
 	ticker := time.NewTicker(heartbeatInterval)
 	defer ticker.Stop()
 
-	s.sendHeartbeats() // Enviar primer heartbeat inmediatamente
+	s.sendHeartbeats()
 
 	for s.Role == Leader {
 		select {
 		case <-ticker.C:
 			s.sendHeartbeats()
 		case <-s.heartbeatC:
-			// Si recibe un mensaje RequestVote con un término mayor, se convierte en Follower.
 			return
 		}
 	}
 }
 
-// startElection incrementa el término e inicia la votación.
 func (s *Server) startElection() {
 	s.mu.Lock()
 	s.Term++
 	s.Role = Candidate
-	s.VotedFor = s.NodeID // Votar por sí mismo
+	s.VotedFor = s.NodeID
 	currentTerm := s.Term
 	lastLogIndex, lastLogTerm := s.getLastLogInfo()
 	s.mu.Unlock()
 
 	log.Printf("🗳️ %s: Iniciando elección para Term %d.", s.NodeID, currentTerm)
 
-	// Enviar RequestVote a todos los pares
 	for id, client := range s.PeerClients {
 		go func(id string, client pbConsensus.ConsensusServiceClient) {
 			req := &pbConsensus.RequestVoteRequest{
@@ -240,25 +213,22 @@ func (s *Server) startElection() {
 
 			resp, err := client.RequestVote(ctx, req)
 			if err != nil {
-				log.Printf("❌ Error votación con %s: %v", id, err)
 				return
 			}
 
 			s.mu.Lock()
-			if resp.GetVoteGranted() && s.Role == Candidate && resp.GetCurrentTerm() == currentTerm {
-				// Incrementar votos recibidos (Lógica de votesReceived no implementada en este bloque, debe ser externa)
-			} else if resp.GetCurrentTerm() > currentTerm {
+			
+			if resp.GetCurrentTerm() > currentTerm {
 				s.Term = resp.GetCurrentTerm()
 				s.Role = Follower
 				s.VotedFor = ""
-				s.heartbeatC <- struct{}{} // Señal para salir del loop Candidate
+				s.heartbeatC <- struct{}{}
 			}
 			s.mu.Unlock()
 		}(id, client)
 	}
 }
 
-// sendHeartbeats envía AppendEntries sin entradas de log.
 func (s *Server) sendHeartbeats() {
 	s.mu.Lock()
 	if s.Role != Leader {
@@ -272,13 +242,12 @@ func (s *Server) sendHeartbeats() {
 
 	for id, client := range s.PeerClients {
 		go func(id string, client pbConsensus.ConsensusServiceClient) {
-			// Preparamos el heartbeat
 			req := &pbConsensus.AppendEntriesRequest{
 				LeaderId:     leaderID,
 				CurrentTerm:  currentTerm,
-				PrevLogIndex: s.MatchIndex[id],          // Usa MatchIndex para saber dónde continuar
-				PrevLogTerm:  currentTerm,               // Simplificado
-				Entries:      []*pbConsensus.LogEntry{}, // Vacío para Heartbeat
+				PrevLogIndex: s.MatchIndex[id],
+				PrevLogTerm:  currentTerm, // Simplificado
+				Entries:      []*pbConsensus.LogEntry{},
 				LeaderCommit: commitIndex,
 			}
 
@@ -287,7 +256,6 @@ func (s *Server) sendHeartbeats() {
 
 			resp, err := client.AppendEntries(ctx, req)
 			if err != nil {
-				// Fallo de red: Ignorar o registrar fallo de nodo
 				return
 			}
 
@@ -296,72 +264,119 @@ func (s *Server) sendHeartbeats() {
 	}
 }
 
-// =================================================================
-// IMPLEMENTACIÓN DE RPCS (Interfaz gRPC)
-// =================================================================
 
-// ProposeAction maneja la solicitud de escritura crítica del Broker.
 func (s *Server) ProposeAction(ctx context.Context, req *pbConsensus.ProposeRequest) (*pbConsensus.ProposeResponse, error) {
 	s.mu.Lock()
 	if s.Role != Leader {
-		leaderAddr := "" // Lógica para encontrar dirección del líder actual (no implementada aquí)
 		s.mu.Unlock()
-		return &pbConsensus.ProposeResponse{Success: false, Message: "Redireccionar: No soy líder", LeaderAddress: leaderAddr}, nil
+		return &pbConsensus.ProposeResponse{Success: false, Message: "Redireccionar: No soy líder"}, nil
 	}
 
-	// 1. Crear nueva entrada de log
 	newIndex := s.getLastLogIndex() + 1
-	newEntry := pbConsensus.LogEntry{
+	// Creamos la entrada usando el tipo gRPC
+	newEntry := &pbConsensus.LogEntry{
 		Term:  s.Term,
 		Index: newIndex,
 		Data:  req.ProposalData,
 	}
 
-	s.Log = append(s.Log, LogEntry(newEntry))
+	// Añadimos al log (que ahora es []*pbConsensus.LogEntry)
+	s.Log = append(s.Log, newEntry)
 	s.mu.Unlock()
 
-	// 2. Replicar la entrada (Lógica de replicación en AppendEntries no implementada en este bloque)
-	// 3. Esperar el Commit por quórum
+	// --- INICIO LÓGICA DE REPLICACIÓN REAL ---
+	successCount := 1
+	peersCount := len(s.PeerClients)
+	quorum := (peersCount / 2) + 1
+	resultCh := make(chan bool, peersCount)
 
-	// Simulamos el commit por simplicidad
-	time.Sleep(100 * time.Millisecond)
-	s.CommitIndex = newIndex
+	for id, client := range s.PeerClients {
+		go func(peerID string, c pbConsensus.ConsensusServiceClient) {
+			s.mu.Lock()
+			prevIndex := s.getLastLogIndex() - 1
+			currentTerm := s.Term
+			commitIndex := s.CommitIndex
+			s.mu.Unlock()
+			
+			appendReq := &pbConsensus.AppendEntriesRequest{
+				LeaderId:     s.NodeID,
+				CurrentTerm:  currentTerm,
+				LeaderCommit: commitIndex,
+				Entries:      []*pbConsensus.LogEntry{newEntry},
+				PrevLogIndex: prevIndex,
+				PrevLogTerm:  currentTerm,
+			}
 
-	// 4. Aplicar al estado final
-	state := s.applyLogEntry(newEntry)
+			ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+			defer cancel()
+
+			resp, err := c.AppendEntries(ctx, appendReq)
+			if err == nil && resp.Success {
+				resultCh <- true
+			} else {
+				resultCh <- false
+			}
+		}(id, client)
+	}
+
+	timeout := time.After(500 * time.Millisecond)
+	
+LoopEsperarVotos:
+	for i := 0; i < peersCount; i++ {
+		select {
+		case success := <-resultCh:
+			if success {
+				successCount++
+			}
+			if successCount >= quorum {
+				break LoopEsperarVotos 
+			}
+		case <-timeout:
+			break LoopEsperarVotos
+		}
+	}
+
+	if successCount < quorum {
+		return &pbConsensus.ProposeResponse{Success: false, Message: "Fallo: No se alcanzó quórum"}, nil
+	}
+
+	s.mu.Lock()
+	if newIndex > s.CommitIndex {
+		s.CommitIndex = newIndex
+	}
+	s.mu.Unlock()
+
+	stateMsg := s.applyLogEntry(newEntry)
 
 	return &pbConsensus.ProposeResponse{
 		Success: true,
 		Message: "Decisión comprometida por quórum.",
 		NewState: &pbConsensus.CriticalResourceState{
 			ResourceId:       "Pista 01",
-			AssignedToFlight: state,
+			AssignedToFlight: stateMsg,
 			LastCommitIndex:  s.CommitIndex,
 		},
 	}, nil
 }
 
-// RequestVote maneja las peticiones de voto de otros candidatos.
 func (s *Server) RequestVote(ctx context.Context, req *pbConsensus.RequestVoteRequest) (*pbConsensus.RequestVoteResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 1. Regla de Término
 	if req.CurrentTerm > s.Term {
 		s.Term = req.CurrentTerm
 		s.Role = Follower
 		s.VotedFor = ""
 	}
 
-	// 2. Regla de Voto y Log
 	voteGranted := false
 	if req.CurrentTerm == s.Term && (s.VotedFor == "" || s.VotedFor == req.CandidateId) {
 		lastLogIndex, lastLogTerm := s.getLastLogInfo()
 		if req.LastLogTerm > lastLogTerm || (req.LastLogTerm == lastLogTerm && req.LastLogIndex >= lastLogIndex) {
 			s.VotedFor = req.CandidateId
 			voteGranted = true
-			s.electionTimeout.Reset(getElectionTimeout()) // Reiniciar el temporizador
-			s.heartbeatC <- struct{}{}                    // Señal para salir del loop de espera si es Follower
+			s.electionTimeout.Reset(getElectionTimeout())
+			s.heartbeatC <- struct{}{}
 		}
 	}
 
@@ -372,34 +387,28 @@ func (s *Server) RequestVote(ctx context.Context, req *pbConsensus.RequestVoteRe
 	}, nil
 }
 
-// AppendEntries maneja Heartbeats y Replicación de Log.
 func (s *Server) AppendEntries(ctx context.Context, req *pbConsensus.AppendEntriesRequest) (*pbConsensus.AppendEntriesResponse, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	// 1. Regla de Término
 	if req.CurrentTerm < s.Term {
 		return &pbConsensus.AppendEntriesResponse{Success: false, CurrentTerm: s.Term}, nil
 	}
 
-	// Si el término del Líder es >= al nuestro, siempre nos convertimos en Follower (o mantenemos).
 	s.Term = req.CurrentTerm
 	s.Role = Follower
 	s.VotedFor = ""
-	s.heartbeatC <- struct{}{} // Reiniciar temporizador de elección
+	s.heartbeatC <- struct{}{}
 
-	// 2. Verificación de Consistencia del Log (simplificado)
-	// Debe verificar que el log en prevLogIndex tenga el término prevLogTerm.
-
-	// 3. Apendizar nuevas entradas (simplificado)
 	if len(req.Entries) > 0 {
-		// Lógica para borrar entradas conflictivas y apendizar nuevas
+		// Lógica simplificada: Agregar todo lo que llegue (asumimos consistencia para el lab)
+		for _, entry := range req.Entries {
+			s.Log = append(s.Log, entry)
+		}
 	}
 
-	// 4. Actualizar CommitIndex
 	if req.LeaderCommit > s.CommitIndex {
 		s.CommitIndex = min(req.LeaderCommit, s.getLastLogIndex())
-		// Aplicar entradas pendientes a la máquina de estado (applyLogEntry)
 	}
 
 	return &pbConsensus.AppendEntriesResponse{Success: true, CurrentTerm: s.Term, LastLogIndex: s.getLastLogIndex()}, nil
@@ -409,7 +418,6 @@ func (s *Server) AppendEntries(ctx context.Context, req *pbConsensus.AppendEntri
 // FUNCIONES AUXILIARES
 // =================================================================
 
-// initializePeerClients establece las conexiones con otros Nodos ATC.
 func (s *Server) initializePeerClients(addrs string) {
 	addrList := strings.Split(addrs, ",")
 	for _, addr := range addrList {
@@ -418,14 +426,14 @@ func (s *Server) initializePeerClients(addrs string) {
 			peerID := parts[0]
 			conn, err := grpc.Dial(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 			if err != nil {
-				log.Fatalf("❌ Error fatal al conectar con Peer ATC %s: %v", peerID, err)
+				log.Printf("❌ Error conectando con Peer %s: %v", peerID, err)
+				continue
 			}
 			s.PeerClients[peerID] = pbConsensus.NewConsensusServiceClient(conn)
 		}
 	}
 }
 
-// getLastLogInfo devuelve el índice y término del último log.
 func (s *Server) getLastLogInfo() (int64, int64) {
 	if len(s.Log) == 0 {
 		return 0, 0
@@ -434,7 +442,6 @@ func (s *Server) getLastLogInfo() (int64, int64) {
 	return lastEntry.Index, lastEntry.Term
 }
 
-// getLastLogIndex devuelve el índice del último log.
 func (s *Server) getLastLogIndex() int64 {
 	if len(s.Log) == 0 {
 		return 0
@@ -442,13 +449,11 @@ func (s *Server) getLastLogIndex() int64 {
 	return s.Log[len(s.Log)-1].Index
 }
 
-// getElectionTimeout devuelve un timeout aleatorio entre min y max.
 func getElectionTimeout() time.Duration {
 	rand.Seed(time.Now().UnixNano())
 	return electionTimeoutMin + time.Duration(rand.Int63n(int64(electionTimeoutMax-electionTimeoutMin)))
 }
 
-// initializeLeaderState inicializa el estado de seguimiento después de ganar la elección.
 func (s *Server) initializeLeaderState() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -461,19 +466,14 @@ func (s *Server) initializeLeaderState() {
 	}
 }
 
-// handleAppendEntriesResponse maneja la respuesta del seguidor (para el líder).
 func (s *Server) handleAppendEntriesResponse(resp *pbConsensus.AppendEntriesResponse) {
-	// Lógica para decrementar NextIndex si falló (resp.Success == false) o incrementar MatchIndex si fue exitoso
+	// Placeholder
 }
 
-// applyLogEntry aplica una entrada del log a la máquina de estado (asignación de pista).
-func (s *Server) applyLogEntry(entry pbConsensus.LogEntry) string {
-	// Esta función simularía la aplicación real del recurso.
-	// Ej: Extraer "Pista X" y "Vuelo Y" de entry.Data y actualizar el estado interno.
-	return "Vuelo asignado según log: " + entry.Data
+func (s *Server) applyLogEntry(entry *pbConsensus.LogEntry) string {
+	return "Vuelo asignado: " + entry.Data
 }
 
-// min devuelve el mínimo entre dos int64.
 func min(a, b int64) int64 {
 	if a < b {
 		return a

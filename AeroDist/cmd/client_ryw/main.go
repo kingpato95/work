@@ -31,7 +31,7 @@ type Client struct {
 }
 
 func main() {
-	log.Println("🚀 Iniciando Cliente RYW (Pasajero en Check-in)...")
+	log.Println("Iniciando Cliente RYW (Pasajero en Check-in)...")
 
 	// 1. Obtener ClientID
 	clientID := os.Getenv("CLIENT_ID")
@@ -42,7 +42,7 @@ func main() {
 	// 2. Conexión con el Coordinador
 	conn, err := grpc.Dial(coordinatorAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
-		log.Fatalf("❌ No se pudo conectar al Coordinador %s: %v", coordinatorAddr, err)
+		log.Fatalf("No se pudo conectar al Coordinador %s: %v", coordinatorAddr, err)
 	}
 	defer conn.Close()
 
@@ -83,20 +83,20 @@ func (c *Client) PerformCheckInCycle(attempt int) {
 		RequestId:    c.LastRequestID, // Clave para idempotencia
 	}
 
-	log.Println("🛫 Enviando Check-in al Coordinador...")
+	log.Println("Enviando Check-in al Coordinador...")
 
 	writeResp, err := c.CoordClient.CheckIn(ctx, writeReq)
 	if err != nil {
-		log.Printf("❌ [%s] ERROR en Check-in: %v", c.ClientID, err)
+		log.Printf("[%s] ERROR en Check-in: %v", c.ClientID, err)
 		return
 	}
 
 	if !writeResp.Success {
-		log.Printf("⚠️ [%s] Check-in fallido (Condición de carrera o error): %s", c.ClientID, writeResp.Message)
+		log.Printf("[%s] Check-in fallido (Condición de carrera o error): %s", c.ClientID, writeResp.Message)
 		return
 	}
 
-	log.Printf("✅ [%s] Check-in confirmado por Coordinador: %s", c.ClientID, writeResp.Message)
+	log.Printf("[%s] Check-in confirmado por Coordinador: %s", c.ClientID, writeResp.Message)
 
 	// 3. Lectura de Confirmación (Garantía Read Your Writes)
 	// Esta lectura debe realizarse inmediatamente después y debe reflejar la escritura.
@@ -105,11 +105,11 @@ func (c *Client) PerformCheckInCycle(attempt int) {
 		FlightId: targetFlightID,
 	}
 
-	log.Println("🔍 Solicitando Boarding Pass (Lectura RYW)...")
+	log.Println("Solicitando Boarding Pass (Lectura RYW)...")
 	readResp, err := c.CoordClient.GetBoardingPass(ctx, readReq)
 
 	if err != nil {
-		log.Printf("❌ [%s] ERROR en Lectura de Confirmación: %v", c.ClientID, err)
+		log.Printf("[%s] ERROR en Lectura de Confirmación: %v", c.ClientID, err)
 		return
 	}
 
@@ -118,10 +118,10 @@ func (c *Client) PerformCheckInCycle(attempt int) {
 
 	// La validación se basa en si el estado devuelto contiene la información escrita.
 	if currentState == nil || !strings.Contains(currentState.GetStatus(), c.LastSeatSelected) {
-		log.Printf("🛑 [%s] FALLO DE CONSISTENCIA RYW!", c.ClientID)
-		log.Printf("   Esperaba asiento: %s. Recibí estado: %v", c.LastSeatSelected, currentState)
+		log.Printf("[%s] FALLO DE CONSISTENCIA RYW!", c.ClientID)
+		log.Printf(" Esperaba asiento: %s. Recibí estado: %v", c.LastSeatSelected, currentState)
 	} else {
-		log.Printf("✨ [%s] VALIDACIÓN RYW EXITOSA. Mi asiento %s se refleja inmediatamente.", c.ClientID, c.LastSeatSelected)
+		log.Printf("[%s] VALIDACIÓN RYW EXITOSA. Mi asiento %s se refleja inmediatamente.", c.ClientID, c.LastSeatSelected)
 	}
 }
 
@@ -130,4 +130,3 @@ func stringsContains(s, substr string) bool {
 	return strings.Contains(s, substr)
 }
 
-// Importar el paquete strings necesario para las funciones auxiliares

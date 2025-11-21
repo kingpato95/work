@@ -1,0 +1,131 @@
+version: '3.8'
+
+services:
+  # --- INFRAESTRUCTURA CENTRAL ---
+  broker:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: broker
+    ports:
+      - "50051:50051"
+    configs:                   # <--- NUEVO
+      - source: flight_updates
+        target: /app/flight_updates.csv
+    networks:
+      - aeronet
+
+  coordinator:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: coordinator
+    ports:
+      - "50054:50054"
+    depends_on:
+      - broker
+    networks:
+      - aeronet
+
+  # --- DATANODES (Consistencia Eventual) ---
+  dn1:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: datanode
+    environment:
+      - NODE_ID=dn1
+      - PEER_ADDRS=dn2:50052,dn3:50052
+    networks:
+      - aeronet
+
+  dn2:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: datanode
+    environment:
+      - NODE_ID=dn2
+      - PEER_ADDRS=dn1:50052,dn3:50052
+    networks:
+      - aeronet
+
+  dn3:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: datanode
+    environment:
+      - NODE_ID=dn3
+      - PEER_ADDRS=dn1:50052,dn2:50052
+    networks:
+      - aeronet
+
+  # --- NODOS ATC (Consenso) ---
+  atc1:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: atcnodo
+    environment:
+      - NODE_ID=atc1
+      - PEER_ADDRS=atc2:50053,atc3:50053
+    networks:
+      - aeronet
+
+  atc2:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: atcnodo
+    environment:
+      - NODE_ID=atc2
+      - PEER_ADDRS=atc1:50053,atc3:50053
+    networks:
+      - aeronet
+
+  atc3:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: atcnodo
+    environment:
+      - NODE_ID=atc3
+      - PEER_ADDRS=atc1:50053,atc2:50053
+    networks:
+      - aeronet
+
+  # --- CLIENTES (Simulación de Tráfico) ---
+  # Pasajero 1 (RYW)
+  cliente_ryw_1:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: client_ryw
+    environment:
+      - CLIENT_ID=Pasajero1
+    depends_on:
+      - coordinator
+    networks:
+      - aeronet
+
+  # Pasajero 2 (Observador - Monotonic Reads)
+  cliente_mr_1:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: client_mr
+    environment:
+      - CLIENT_ID=Observador1
+    depends_on:
+      - broker
+    networks:
+      - aeronet
+
+networks:
+  aeronet:
+    driver: bridge
+
+configs:
+  flight_updates:
+    file: ./flight_updates.csv

@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package consensus;
 
-option go_package = "./proto;consensus_proto";
+option go_package = "aeroDist/proto/consensus";
 
 message LogEntry {
     int64 term = 1;
